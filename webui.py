@@ -1,4 +1,6 @@
 import os,shutil,sys,pdb,re
+version="v2"if sys.argv[-1]=="v2" else"v1"
+os.environ["version"]=version
 now_dir = os.getcwd()
 sys.path.insert(0, now_dir)
 import json,yaml,warnings,torch
@@ -104,8 +106,8 @@ def fix_gpu_numbers(inputs):
         return ",".join(output)
     except:
         return inputs
-pretrained_sovits_name="GPT_SoVITS/pretrained_models/s2G488k.pth"
-pretrained_gpt_name="GPT_SoVITS/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt"
+pretrained_sovits_name="GPT_SoVITS/pretrained_models/s2G488k.pth"if version=="v1"else"GPT_SoVITS/pretrained_models/gsv-v2final-pretrained/s2G2333k.pth"
+pretrained_gpt_name="GPT_SoVITS/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt"if version=="v1"else "GPT_SoVITS/pretrained_models/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt"
 def get_weights_names():
     SoVITS_names = [pretrained_sovits_name]
     for name in os.listdir(SoVITS_weight_root):
@@ -225,14 +227,14 @@ def open_asr(asr_inp_dir, asr_opt_dir, asr_model, asr_model_size, asr_lang, asr_
         output_file_name = os.path.basename(asr_inp_dir)
         output_folder = asr_opt_dir or "output/asr_opt"
         output_file_path = os.path.abspath(f'{output_folder}/{output_file_name}.list')
-        yield "ASR任务开启：%s"%cmd, {"__type__":"update","visible":False}, {"__type__":"update","visible":True}, {"__type__":"update"}
+        yield "ASR任务开启：%s"%cmd, {"__type__":"update","visible":False}, {"__type__":"update","visible":True}, {"__type__":"update"}, {"__type__":"update"}, {"__type__":"update"}
         print(cmd)
         p_asr = Popen(cmd, shell=True)
         p_asr.wait()
         p_asr=None
-        yield f"ASR任务完成, 查看终端进行下一步", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}, {"__type__":"update","value":output_file_path}
+        yield f"ASR任务完成, 查看终端进行下一步", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}, {"__type__":"update","value":output_file_path}, {"__type__":"update","value":output_file_path}, {"__type__":"update","value":asr_inp_dir}
     else:
-        yield "已有正在进行的ASR任务，需先终止才能开启下一次任务", {"__type__":"update","visible":False}, {"__type__":"update","visible":True}, {"__type__":"update"}
+        yield "已有正在进行的ASR任务，需先终止才能开启下一次任务", {"__type__":"update","visible":False}, {"__type__":"update","visible":True}, {"__type__":"update"}, {"__type__":"update"}, {"__type__":"update"}
         # return None
 
 def close_asr():
@@ -248,14 +250,14 @@ def open_denoise(denoise_inp_dir, denoise_opt_dir):
         denoise_opt_dir=my_utils.clean_path(denoise_opt_dir)
         cmd = '"%s" tools/cmd-denoise.py -i "%s" -o "%s" -p %s'%(python_exec,denoise_inp_dir,denoise_opt_dir,"float16"if is_half==True else "float32")
 
-        yield "语音降噪任务开启：%s"%cmd, {"__type__":"update","visible":False}, {"__type__":"update","visible":True}, {"__type__":"update"}
+        yield "语音降噪任务开启：%s"%cmd, {"__type__":"update","visible":False}, {"__type__":"update","visible":True}, {"__type__":"update"}, {"__type__":"update"}
         print(cmd)
         p_denoise = Popen(cmd, shell=True)
         p_denoise.wait()
         p_denoise=None
-        yield f"语音降噪任务完成, 查看终端进行下一步", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}, {"__type__":"update","value":denoise_opt_dir}
+        yield f"语音降噪任务完成, 查看终端进行下一步", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}, {"__type__":"update","value":denoise_opt_dir}, {"__type__":"update","value":denoise_opt_dir}
     else:
-        yield "已有正在进行的语音降噪任务，需先终止才能开启下一次任务", {"__type__":"update","visible":False}, {"__type__":"update","visible":True}, {"__type__":"update"}
+        yield "已有正在进行的语音降噪任务，需先终止才能开启下一次任务", {"__type__":"update","visible":False}, {"__type__":"update","visible":True}, {"__type__":"update"}, {"__type__":"update"}
         # return None
 
 def close_denoise():
@@ -313,7 +315,7 @@ p_train_GPT=None
 def open1Bb(batch_size,total_epoch,exp_name,if_dpo,if_save_latest,if_save_every_weights,save_every_epoch,gpu_numbers,pretrained_s1):
     global p_train_GPT
     if(p_train_GPT==None):
-        with open("GPT_SoVITS/configs/s1longer.yaml")as f:
+        with open("GPT_SoVITS/configs/s1longer.yaml"if version=="v1"else "GPT_SoVITS/configs/s1longer-v2.yaml")as f:
             data=f.read()
             data=yaml.load(data, Loader=yaml.FullLoader)
         s1_dir="%s/%s"%(exp_root,exp_name)
@@ -375,13 +377,13 @@ def open_slice(inp,opt_root,threshold,min_length,min_interval,hop_size,max_sil_k
             print(cmd)
             p = Popen(cmd, shell=True)
             ps_slice.append(p)
-        yield "切割执行中", {"__type__": "update", "visible": False}, {"__type__": "update", "visible": True}, {"__type__": "update"}, {"__type__": "update"}
+        yield "切割执行中", {"__type__": "update", "visible": False}, {"__type__": "update", "visible": True}, {"__type__": "update"}, {"__type__": "update"}, {"__type__": "update"}
         for p in ps_slice:
             p.wait()
         ps_slice=[]
-        yield "切割结束", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}, {"__type__": "update", "value":opt_root}, {"__type__": "update", "value":opt_root}
+        yield "切割结束", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}, {"__type__": "update", "value":opt_root}, {"__type__": "update", "value":opt_root}, {"__type__": "update", "value":opt_root}
     else:
-        yield "已有正在进行的切割任务，需先终止才能开启下一次任务", {"__type__": "update", "visible": False}, {"__type__": "update", "visible": True}, {"__type__": "update"}, {"__type__": "update"}
+        yield "已有正在进行的切割任务，需先终止才能开启下一次任务", {"__type__": "update", "visible": False}, {"__type__": "update", "visible": True}, {"__type__": "update"}, {"__type__": "update"}, {"__type__": "update"}
 
 def close_slice():
     global ps_slice
@@ -767,7 +769,7 @@ with gr.Blocks(title="GPT-SoVITS WebUI") as app:
                         )
                         asr_lang = gr.Dropdown(
                             label       = i18n("ASR 语言设置"),
-                            choices     = ["zh"],
+                            choices     = ["zh","yue"],
                             interactive = True,
                             value="zh"
                         )
@@ -816,20 +818,14 @@ with gr.Blocks(title="GPT-SoVITS WebUI") as app:
                 label_info = gr.Textbox(label=i18n("打标工具进程输出信息"))
             if_label.change(change_label, [if_label,path_list], [label_info])
             if_uvr5.change(change_uvr5, [if_uvr5], [uvr5_info])
-            open_asr_button.click(open_asr, [asr_inp_dir, asr_opt_dir, asr_model, asr_size, asr_lang, asr_precision], [asr_info,open_asr_button,close_asr_button,path_list])
-            close_asr_button.click(close_asr, [], [asr_info,open_asr_button,close_asr_button])
-            open_slicer_button.click(open_slice, [slice_inp_path,slice_opt_root,threshold,min_length,min_interval,hop_size,max_sil_kept,_max,alpha,n_process], [slicer_info,open_slicer_button,close_slicer_button,asr_inp_dir,denoise_input_dir])
-            close_slicer_button.click(close_slice, [], [slicer_info,open_slicer_button,close_slicer_button])
-            open_denoise_button.click(open_denoise, [denoise_input_dir,denoise_output_dir], [denoise_info,open_denoise_button,close_denoise_button,asr_inp_dir])
-            close_denoise_button.click(close_denoise, [], [denoise_info,open_denoise_button,close_denoise_button])
 
         with gr.TabItem(i18n("1-GPT-SoVITS-TTS")):
             with gr.Row():
                 exp_name = gr.Textbox(label=i18n("*实验/模型名"), value="xxx", interactive=True)
                 gpu_info = gr.Textbox(label=i18n("显卡信息"), value=gpu_info, visible=True, interactive=False)
-                pretrained_s2G = gr.Textbox(label=i18n("预训练的SoVITS-G模型路径"), value="GPT_SoVITS/pretrained_models/s2G488k.pth", interactive=True)
-                pretrained_s2D = gr.Textbox(label=i18n("预训练的SoVITS-D模型路径"), value="GPT_SoVITS/pretrained_models/s2D488k.pth", interactive=True)
-                pretrained_s1 = gr.Textbox(label=i18n("预训练的GPT模型路径"), value="GPT_SoVITS/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt", interactive=True)
+                pretrained_s2G = gr.Textbox(label=i18n("预训练的SoVITS-G模型路径"), value=pretrained_sovits_name, interactive=True)
+                pretrained_s2D = gr.Textbox(label=i18n("预训练的SoVITS-D模型路径"), value=pretrained_sovits_name.replace("s2G","s2D"), interactive=True)
+                pretrained_s1 = gr.Textbox(label=i18n("预训练的GPT模型路径"), value=pretrained_gpt_name, interactive=True)
             with gr.TabItem(i18n("1A-训练集格式化工具")):
                 gr.Markdown(value=i18n("输出logs/实验名目录下应有23456开头的文件和文件夹"))
                 with gr.Row():
@@ -865,6 +861,14 @@ with gr.Blocks(title="GPT-SoVITS WebUI") as app:
                     button1abc_open = gr.Button(i18n("开启一键三连"), variant="primary",visible=True)
                     button1abc_close = gr.Button(i18n("终止一键三连"), variant="primary",visible=False)
                     info1abc=gr.Textbox(label=i18n("一键三连进程输出信息"))
+
+            open_asr_button.click(open_asr, [asr_inp_dir, asr_opt_dir, asr_model, asr_size, asr_lang, asr_precision], [asr_info,open_asr_button,close_asr_button,path_list,inp_text,inp_wav_dir])
+            close_asr_button.click(close_asr, [], [asr_info,open_asr_button,close_asr_button])
+            open_slicer_button.click(open_slice, [slice_inp_path,slice_opt_root,threshold,min_length,min_interval,hop_size,max_sil_kept,_max,alpha,n_process], [slicer_info,open_slicer_button,close_slicer_button,asr_inp_dir,denoise_input_dir,inp_wav_dir])
+            close_slicer_button.click(close_slice, [], [slicer_info,open_slicer_button,close_slicer_button])
+            open_denoise_button.click(open_denoise, [denoise_input_dir,denoise_output_dir], [denoise_info,open_denoise_button,close_denoise_button,asr_inp_dir,inp_wav_dir])
+            close_denoise_button.click(close_denoise, [], [denoise_info,open_denoise_button,close_denoise_button])
+
             button1a_open.click(open1a, [inp_text,inp_wav_dir,exp_name,gpu_numbers1a,bert_pretrained_dir], [info1a,button1a_open,button1a_close])
             button1a_close.click(close1a, [], [info1a,button1a_open,button1a_close])
             button1b_open.click(open1b, [inp_text,inp_wav_dir,exp_name,gpu_numbers1Ba,cnhubert_base_dir], [info1b,button1b_open,button1b_close])
