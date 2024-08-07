@@ -1,6 +1,8 @@
 # This code is modified from https://github.com/PaddlePaddle/PaddleSpeech/tree/develop/paddlespeech/t2s/frontend/g2pw
 # This code is modified from https://github.com/GitYCC/g2pW
 
+import warnings
+warnings.filterwarnings("ignore")
 import json
 import os
 import zipfile,requests
@@ -11,6 +13,7 @@ from typing import Tuple
 
 import numpy as np
 import onnxruntime
+onnxruntime.set_default_logger_severity(3)
 from opencc import OpenCC
 from transformers import AutoTokenizer
 from pypinyin import pinyin

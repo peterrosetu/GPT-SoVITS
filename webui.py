@@ -1,17 +1,15 @@
-import os,shutil,sys,pdb,re
-if len(sys.argv)==1:sys.argv.append('v1')
-version="v2"if sys.argv[1]=="v2" else"v1"
-language=sys.argv[-1] if len(sys.argv[-1])==5 else "auto"
+import os,sys
+if len(sys.argv)==1:sys.argv.append('v2')
+version="v1"if sys.argv[1]=="v1" else"v2"
 os.environ["version"]=version
-os.environ["language"]=language
 now_dir = os.getcwd()
 sys.path.insert(0, now_dir)
-import json,yaml,warnings,torch
+import warnings
+warnings.filterwarnings("ignore")
+import json,yaml,torch,pdb,re,shutil
 import platform
 import psutil
 import signal
-
-warnings.filterwarnings("ignore")
 torch.manual_seed(233333)
 tmp = os.path.join(now_dir, "TEMP")
 os.makedirs(tmp, exist_ok=True)
@@ -50,11 +48,12 @@ from tools import my_utils
 import traceback
 import shutil
 import pdb
-import gradio as gr
 from subprocess import Popen
 import signal
 from config import python_exec,infer_device,is_half,exp_root,webui_port_main,webui_port_infer_tts,webui_port_uvr5,webui_port_subfix,is_share
-from tools.i18n.i18n import I18nAuto
+from tools.i18n.i18n import I18nAuto, scan_language_list
+language=sys.argv[-1] if sys.argv[-1] in scan_language_list() else "auto"
+os.environ["language"]=language
 if language != 'auto':
     i18n = I18nAuto(language=language)
 else:
@@ -62,9 +61,10 @@ else:
 from scipy.io import wavfile
 from tools.my_utils import load_audio
 from multiprocessing import cpu_count
-
 # os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1' # 当遇到mps不支持的步骤时使用cpu
-
+import gradio.analytics as analytics
+analytics.version_check = lambda:None
+import gradio as gr
 n_cpu=cpu_count()
            
 ngpu = torch.cuda.device_count()
@@ -112,23 +112,46 @@ def fix_gpu_numbers(inputs):
         return ",".join(output)
     except:
         return inputs
-pretrained_sovits_name="GPT_SoVITS/pretrained_models/s2G488k.pth"if version=="v1"else"GPT_SoVITS/pretrained_models/gsv-v2final-pretrained/s2G2333k.pth"
-pretrained_gpt_name="GPT_SoVITS/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt"if version=="v1"else "GPT_SoVITS/pretrained_models/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt"
+
+pretrained_sovits_name=["GPT_SoVITS/pretrained_models/gsv-v2final-pretrained/s2G2333k.pth", "GPT_SoVITS/pretrained_models/s2G488k.pth"]
+pretrained_gpt_name=["GPT_SoVITS/pretrained_models/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt", "GPT_SoVITS/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt"]
+
+pretrained_model_list = (pretrained_sovits_name[-int(version[-1])+2],pretrained_sovits_name[-int(version[-1])+2].replace("s2G","s2D"),pretrained_gpt_name[-int(version[-1])+2],"GPT_SoVITS/pretrained_models/chinese-roberta-wwm-ext-large","GPT_SoVITS/pretrained_models/chinese-hubert-base")
+
+_=''
+for i in pretrained_model_list:
+    if os.path.exists(i):...
+    else:_+=f'\n    {i}'
+if _:
+    print("warning:",i18n('以下模型不存在:')+_)
+
+_ =[[],[]]
+for i in range(2):
+    if os.path.exists(pretrained_gpt_name[i]):_[0].append(pretrained_gpt_name[i])
+    else:_[0].append("")##没有下pretrained模型的，说不定他们是想自己从零训底模呢
+    if os.path.exists(pretrained_sovits_name[i]):_[-1].append(pretrained_sovits_name[i])
+    else:_[-1].append("")
+pretrained_gpt_name,pretrained_sovits_name = _
+
+SoVITS_weight_root=["SoVITS_weights_v2","SoVITS_weights"]
+GPT_weight_root=["GPT_weights_v2","GPT_weights"]
+for root in SoVITS_weight_root+GPT_weight_root:
+    os.makedirs(root,exist_ok=True)
 def get_weights_names():
-    SoVITS_names = [pretrained_sovits_name]
-    for name in os.listdir(SoVITS_weight_root):
-        if name.endswith(".pth"):SoVITS_names.append(name)
-    GPT_names = [pretrained_gpt_name]
-    for name in os.listdir(GPT_weight_root):
-        if name.endswith(".ckpt"): GPT_names.append(name)
-    return SoVITS_names,GPT_names
-SoVITS_weight_root="SoVITS_weights_v2" if version=='v2' else "SoVITS_weights"
-GPT_weight_root="GPT_weights_v2" if version=='v2' else "GPT_weights"
-os.makedirs("SoVITS_weights",exist_ok=True)
-os.makedirs("GPT_weights",exist_ok=True)
-os.makedirs("SoVITS_weights_v2",exist_ok=True)
-os.makedirs("GPT_weights_v2",exist_ok=True)
+    SoVITS_names = [name for name in pretrained_sovits_name if name!=""]
+    for path in SoVITS_weight_root:
+        for name in os.listdir(path):
+            if name.endswith(".pth"): SoVITS_names.append("%s/%s" % (path, name))
+    GPT_names = [name for name in pretrained_gpt_name if name!=""]
+    for path in GPT_weight_root:
+        for name in os.listdir(path):
+            if name.endswith(".ckpt"): GPT_names.append("%s/%s" % (path, name))
+    return SoVITS_names, GPT_names
+
 SoVITS_names,GPT_names = get_weights_names()
+for path in SoVITS_weight_root+GPT_weight_root:
+    os.makedirs(path,exist_ok=True)
+
 
 def custom_sort_key(s):
     # 使用正则表达式提取字符串中的数字部分和非数字部分
@@ -226,6 +249,7 @@ def open_asr(asr_inp_dir, asr_opt_dir, asr_model, asr_model_size, asr_lang, asr_
     if(p_asr==None):
         asr_inp_dir=my_utils.clean_path(asr_inp_dir)
         asr_opt_dir=my_utils.clean_path(asr_opt_dir)
+        check_for_exists([asr_inp_dir])
         cmd = f'"{python_exec}" tools/asr/{asr_dict[asr_model]["path"]}'
         cmd += f' -i "{asr_inp_dir}"'
         cmd += f' -o "{asr_opt_dir}"'
@@ -256,6 +280,7 @@ def open_denoise(denoise_inp_dir, denoise_opt_dir):
     if(p_denoise==None):
         denoise_inp_dir=my_utils.clean_path(denoise_inp_dir)
         denoise_opt_dir=my_utils.clean_path(denoise_opt_dir)
+        check_for_exists([denoise_inp_dir])
         cmd = '"%s" tools/cmd-denoise.py -i "%s" -o "%s" -p %s'%(python_exec,denoise_inp_dir,denoise_opt_dir,"float16"if is_half==True else "float32")
 
         yield "语音降噪任务开启：%s"%cmd, {"__type__":"update","visible":False}, {"__type__":"update","visible":True}, {"__type__":"update"}, {"__type__":"update"}
@@ -284,6 +309,7 @@ def open1Ba(batch_size,total_epoch,exp_name,text_low_lr_rate,if_save_latest,if_s
             data=json.loads(data)
         s2_dir="%s/%s"%(exp_root,exp_name)
         os.makedirs("%s/logs_s2"%(s2_dir),exist_ok=True)
+        check_for_exists([s2_dir],is_train=True)
         if(is_half==False):
             data["train"]["fp16_run"]=False
             batch_size=max(1,batch_size//2)
@@ -296,9 +322,11 @@ def open1Ba(batch_size,total_epoch,exp_name,text_low_lr_rate,if_save_latest,if_s
         data["train"]["if_save_every_weights"]=if_save_every_weights
         data["train"]["save_every_epoch"]=save_every_epoch
         data["train"]["gpu_numbers"]=gpu_numbers1Ba
+        data["model"]["version"]=version
         data["data"]["exp_dir"]=data["s2_ckpt_dir"]=s2_dir
-        data["save_weight_dir"]=SoVITS_weight_root
+        data["save_weight_dir"]=SoVITS_weight_root[-int(version[-1])+2]
         data["name"]=exp_name
+        data["version"]=version
         tmp_config_path="%s/tmp_s2.json"%tmp
         with open(tmp_config_path,"w")as f:f.write(json.dumps(data))
 
@@ -328,6 +356,7 @@ def open1Bb(batch_size,total_epoch,exp_name,if_dpo,if_save_latest,if_save_every_
             data=yaml.load(data, Loader=yaml.FullLoader)
         s1_dir="%s/%s"%(exp_root,exp_name)
         os.makedirs("%s/logs_s1"%(s1_dir),exist_ok=True)
+        check_for_exists([s1_dir],is_train=True)
         if(is_half==False):
             data["train"]["precision"]="32"
             batch_size = max(1, batch_size // 2)
@@ -338,11 +367,12 @@ def open1Bb(batch_size,total_epoch,exp_name,if_dpo,if_save_latest,if_save_every_
         data["train"]["if_save_every_weights"]=if_save_every_weights
         data["train"]["if_save_latest"]=if_save_latest
         data["train"]["if_dpo"]=if_dpo
-        data["train"]["half_weights_save_dir"]=GPT_weight_root
+        data["train"]["half_weights_save_dir"]=GPT_weight_root[-int(version[-1])+2]
         data["train"]["exp_name"]=exp_name
         data["train_semantic_path"]="%s/6-name2semantic.tsv"%s1_dir
         data["train_phoneme_path"]="%s/2-name2text.txt"%s1_dir
         data["output_dir"]="%s/logs_s1"%s1_dir
+        # data["version"]=version
 
         os.environ["_CUDA_VISIBLE_DEVICES"]=fix_gpu_numbers(gpu_numbers.replace("-",","))
         os.environ["hz"]="25hz"
@@ -371,13 +401,14 @@ def open_slice(inp,opt_root,threshold,min_length,min_interval,hop_size,max_sil_k
     global ps_slice
     inp = my_utils.clean_path(inp)
     opt_root = my_utils.clean_path(opt_root)
+    check_for_exists([inp])
     if(os.path.exists(inp)==False):
-        yield "输入路径不存在", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}, {"__type__": "update"}, {"__type__": "update"}
+        yield "输入路径不存在", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}, {"__type__": "update"}, {"__type__": "update"}, {"__type__": "update"}
         return
     if os.path.isfile(inp):n_parts=1
     elif os.path.isdir(inp):pass
     else:
-        yield "输入路径存在但既不是文件也不是文件夹", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}, {"__type__": "update"}, {"__type__": "update"}
+        yield "输入路径存在但既不是文件也不是文件夹", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}, {"__type__": "update"}, {"__type__": "update"}, {"__type__": "update"}
         return
     if (ps_slice == []):
         for i_part in range(n_parts):
@@ -409,6 +440,7 @@ def open1a(inp_text,inp_wav_dir,exp_name,gpu_numbers,bert_pretrained_dir):
     global ps1a
     inp_text = my_utils.clean_path(inp_text)
     inp_wav_dir = my_utils.clean_path(inp_wav_dir)
+    check_for_exists([inp_text,inp_wav_dir])
     if (ps1a == []):
         opt_dir="%s/%s"%(exp_root,exp_name)
         config={
@@ -470,6 +502,7 @@ def open1b(inp_text,inp_wav_dir,exp_name,gpu_numbers,ssl_pretrained_dir):
     global ps1b
     inp_text = my_utils.clean_path(inp_text)
     inp_wav_dir = my_utils.clean_path(inp_wav_dir)
+    check_for_exists([inp_text,inp_wav_dir])
     if (ps1b == []):
         config={
             "inp_text":inp_text,
@@ -517,6 +550,7 @@ ps1c=[]
 def open1c(inp_text,exp_name,gpu_numbers,pretrained_s2G_path):
     global ps1c
     inp_text = my_utils.clean_path(inp_text)
+    check_for_exists([inp_text])
     if (ps1c == []):
         opt_dir="%s/%s"%(exp_root,exp_name)
         config={
@@ -575,6 +609,7 @@ def open1abc(inp_text,inp_wav_dir,exp_name,gpu_numbers1a,gpu_numbers1Ba,gpu_numb
     global ps1abc
     inp_text = my_utils.clean_path(inp_text)
     inp_wav_dir = my_utils.clean_path(inp_wav_dir)
+    check_for_exists([inp_text,inp_wav_dir])
     if (ps1abc == []):
         opt_dir="%s/%s"%(exp_root,exp_name)
         try:
@@ -701,6 +736,43 @@ def close1abc():
                 traceback.print_exc()
         ps1abc=[]
     return "已终止所有一键三连进程", {"__type__": "update", "visible": True}, {"__type__": "update", "visible": False}
+
+def switch_version(version_):
+    os.environ['version']=version_
+    global version
+    version = version_
+    if pretrained_sovits_name[-int(version[-1])+2] !='' and pretrained_gpt_name[-int(version[-1])+2] !='':...
+    else:   
+        gr.Warning(i18n(f'未下载{version.upper()}模型'))
+    return  {'__type__':'update', 'value':pretrained_sovits_name[-int(version[-1])+2]}, {'__type__':'update', 'value':pretrained_sovits_name[-int(version[-1])+2].replace("s2G","s2D")}, {'__type__':'update', 'value':pretrained_gpt_name[-int(version[-1])+2]}, {'__type__':'update', 'value':pretrained_gpt_name[-int(version[-1])+2]}, {'__type__':'update', 'value':pretrained_sovits_name[-int(version[-1])+2]}
+
+def check_for_exists(file_list=[],is_train=False):
+    _=[]
+    if is_train == True and file_list:
+        file_list.append(os.path.join(file_list[0],'2-name2text.txt'))
+        file_list.append(os.path.join(file_list[0],'3-bert'))
+        file_list.append(os.path.join(file_list[0],'4-cnhubert'))
+        file_list.append(os.path.join(file_list[0],'5-wav32k'))
+        file_list.append(os.path.join(file_list[0],'6-name2semantic.tsv'))
+    for file in file_list:
+        if os.path.exists(file):pass
+        else:_.append(file)
+    if _:
+        if is_train:
+            for i in _:
+                if i != '':
+                    gr.Warning(i)
+            gr.Warning(i18n('以下文件或文件夹不存在:'))
+        else:
+            if len(_) == 1:
+                if _[0]:
+                    gr.Warning(i)
+                gr.Warning(i18n('文件或文件夹不存在:'))
+            else:
+                for i in _:
+                    if i != '':
+                        gr.Warning(i)
+                gr.Warning(i18n('以下文件或文件夹不存在:'))
 
 with gr.Blocks(title="GPT-SoVITS WebUI") as app:
     gr.Markdown(
@@ -831,9 +903,10 @@ with gr.Blocks(title="GPT-SoVITS WebUI") as app:
             with gr.Row():
                 exp_name = gr.Textbox(label=i18n("*实验/模型名"), value="xxx", interactive=True)
                 gpu_info = gr.Textbox(label=i18n("显卡信息"), value=gpu_info, visible=True, interactive=False)
-                pretrained_s2G = gr.Textbox(label=i18n("预训练的SoVITS-G模型路径"), value=pretrained_sovits_name, interactive=True)
-                pretrained_s2D = gr.Textbox(label=i18n("预训练的SoVITS-D模型路径"), value=pretrained_sovits_name.replace("s2G","s2D"), interactive=True)
-                pretrained_s1 = gr.Textbox(label=i18n("预训练的GPT模型路径"), value=pretrained_gpt_name, interactive=True)
+                version_checkbox = gr.Radio(label=i18n("版本"),value=version,choices=['v1','v2'])
+                pretrained_s2G = gr.Textbox(label=i18n("预训练的SoVITS-G模型路径"), value=pretrained_sovits_name[-int(version[-1])+2], interactive=True)
+                pretrained_s2D = gr.Textbox(label=i18n("预训练的SoVITS-D模型路径"), value=pretrained_sovits_name[-int(version[-1])+2].replace("s2G","s2D"), interactive=True)
+                pretrained_s1 = gr.Textbox(label=i18n("预训练的GPT模型路径"), value=pretrained_gpt_name[-int(version[-1])+2], interactive=True)
             with gr.TabItem(i18n("1A-训练集格式化工具")):
                 gr.Markdown(value=i18n("输出logs/实验名目录下应有23456开头的文件和文件夹"))
                 with gr.Row():
@@ -876,7 +949,7 @@ with gr.Blocks(title="GPT-SoVITS WebUI") as app:
             close_slicer_button.click(close_slice, [], [slicer_info,open_slicer_button,close_slicer_button])
             open_denoise_button.click(open_denoise, [denoise_input_dir,denoise_output_dir], [denoise_info,open_denoise_button,close_denoise_button,asr_inp_dir,inp_wav_dir])
             close_denoise_button.click(close_denoise, [], [denoise_info,open_denoise_button,close_denoise_button])
-
+            
             button1a_open.click(open1a, [inp_text,inp_wav_dir,exp_name,gpu_numbers1a,bert_pretrained_dir], [info1a,button1a_open,button1a_close])
             button1a_close.click(close1a, [], [info1a,button1a_open,button1a_close])
             button1b_open.click(open1b, [inp_text,inp_wav_dir,exp_name,gpu_numbers1Ba,cnhubert_base_dir], [info1b,button1b_open,button1b_close])
@@ -919,8 +992,8 @@ with gr.Blocks(title="GPT-SoVITS WebUI") as app:
             with gr.TabItem(i18n("1C-推理")):
                 gr.Markdown(value=i18n("选择训练完存放在SoVITS_weights和GPT_weights下的模型。默认的一个是底模，体验5秒Zero Shot TTS用。"))
                 with gr.Row():
-                    GPT_dropdown = gr.Dropdown(label=i18n("*GPT模型列表"), choices=sorted(GPT_names,key=custom_sort_key),value=pretrained_gpt_name,interactive=True)
-                    SoVITS_dropdown = gr.Dropdown(label=i18n("*SoVITS模型列表"), choices=sorted(SoVITS_names,key=custom_sort_key),value=pretrained_sovits_name,interactive=True)
+                    GPT_dropdown = gr.Dropdown(label=i18n("*GPT模型列表"), choices=sorted(GPT_names,key=custom_sort_key),value=pretrained_gpt_name[0],interactive=True)
+                    SoVITS_dropdown = gr.Dropdown(label=i18n("*SoVITS模型列表"), choices=sorted(SoVITS_names,key=custom_sort_key),value=pretrained_sovits_name[0],interactive=True)
                     gpu_number_1C=gr.Textbox(label=i18n("GPU卡号,只能填1个整数"), value=gpus, interactive=True)
                     refresh_button = gr.Button(i18n("刷新模型路径"), variant="primary")
                     refresh_button.click(fn=change_choices,inputs=[],outputs=[SoVITS_dropdown,GPT_dropdown])
@@ -928,6 +1001,7 @@ with gr.Blocks(title="GPT-SoVITS WebUI") as app:
                     if_tts = gr.Checkbox(label=i18n("是否开启TTS推理WebUI"), show_label=True)
                     tts_info = gr.Textbox(label=i18n("TTS推理WebUI进程输出信息"))
                     if_tts.change(change_tts_inference, [if_tts,bert_pretrained_dir,cnhubert_base_dir,gpu_number_1C,GPT_dropdown,SoVITS_dropdown], [tts_info])
+            version_checkbox.change(switch_version,[version_checkbox],[pretrained_s2G,pretrained_s2D,pretrained_s1,GPT_dropdown,SoVITS_dropdown])
         with gr.TabItem(i18n("2-GPT-SoVITS-变声")):gr.Markdown(value=i18n("施工中，请静候佳音"))
     app.queue(concurrency_count=511, max_size=1022).launch(
         server_name="0.0.0.0",
