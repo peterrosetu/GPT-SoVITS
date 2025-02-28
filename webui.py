@@ -231,11 +231,13 @@ def kill_proc_tree(pid, including_parent=True):
         except OSError:
             pass
 
+import subprocess
 system=platform.system()
 def kill_process(pid):
     if(system=="Windows"):
         cmd = "taskkill /t /f /pid %s" % pid
-        os.system(cmd)
+        # os.system(cmd)
+        subprocess.run(cmd,shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
         kill_proc_tree(pid)
 
@@ -251,6 +253,7 @@ def change_label(path_list):
         p_label = Popen(cmd, shell=True)
     elif(p_label!=None):
         kill_process(p_label.pid)
+        print(i18n("打标工具WebUI进程已成功手动终止"))
         p_label=None
         yield i18n("打标工具WebUI已关闭"), {'__type__':'update','visible':True}, {'__type__':'update','visible':False}
 
@@ -263,6 +266,7 @@ def change_uvr5():
         p_uvr5 = Popen(cmd, shell=True)
     elif(p_uvr5!=None):
         kill_process(p_uvr5.pid)
+        print(i18n("UVR5进程已成功手动终止"))
         p_uvr5=None
         yield i18n("UVR5已关闭"), {'__type__':'update','visible':True}, {'__type__':'update','visible':False}
 
@@ -289,6 +293,7 @@ def change_tts_inference(bert_path,cnhubert_base_path,gpu_number,gpt_path,sovits
         p_tts_inference = Popen(cmd, shell=True)
     elif(p_tts_inference!=None):
         kill_process(p_tts_inference.pid)
+        print(i18n("TTS推理进程已成功手动终止"))
         p_tts_inference=None
         yield i18n("TTS推理进程已关闭"), {'__type__':'update','visible':True}, {'__type__':'update','visible':False}
 
@@ -322,6 +327,7 @@ def close_asr():
     global p_asr
     if(p_asr!=None):
         kill_process(p_asr.pid)
+        print(i18n("ASR进程已成功手动终止"))
         p_asr=None
     return "已终止ASR进程", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}
 def open_denoise(denoise_inp_dir, denoise_opt_dir):
@@ -346,6 +352,7 @@ def close_denoise():
     global p_denoise
     if(p_denoise!=None):
         kill_process(p_denoise.pid)
+        print(i18n("语音降噪进程已成功手动终止"))
         p_denoise=None
     return "已终止语音降噪进程", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}
 
@@ -398,6 +405,7 @@ def close1Ba():
     global p_train_SoVITS
     if(p_train_SoVITS!=None):
         kill_process(p_train_SoVITS.pid)
+        print(i18n("SoVITS训练进程已成功手动终止"))
         p_train_SoVITS=None
     return "已终止SoVITS训练", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}
 
@@ -448,6 +456,7 @@ def close1Bb():
     global p_train_GPT
     if(p_train_GPT!=None):
         kill_process(p_train_GPT.pid)
+        print(i18n("GPT训练进程已成功手动终止"))
         p_train_GPT=None
     return "已终止GPT训练", {"__type__":"update","visible":True}, {"__type__":"update","visible":False}
 
@@ -485,6 +494,7 @@ def close_slice():
         for p_slice in ps_slice:
             try:
                 kill_process(p_slice.pid)
+                print(i18n("所有切割进程已成功手动终止"))
             except:
                 traceback.print_exc()
         ps_slice=[]
@@ -548,6 +558,7 @@ def close1a():
         for p1a in ps1a:
             try:
                 kill_process(p1a.pid)
+                print(i18n("所有1a进程已成功手动终止"))
             except:
                 traceback.print_exc()
         ps1a=[]
@@ -598,6 +609,7 @@ def close1b():
         for p1b in ps1b:
             try:
                 kill_process(p1b.pid)
+                print(i18n("所有1b进程已成功手动终止"))
             except:
                 traceback.print_exc()
         ps1b=[]
@@ -657,6 +669,7 @@ def close1c():
         for p1c in ps1c:
             try:
                 kill_process(p1c.pid)
+                print(i18n("所有语义token进程已成功手动终止"))
             except:
                 traceback.print_exc()
         ps1c=[]
@@ -791,6 +804,7 @@ def close1abc():
         for p1abc in ps1abc:
             try:
                 kill_process(p1abc.pid)
+                print(i18n("所有一键三连进程已成功手动终止"))
             except:
                 traceback.print_exc()
         ps1abc=[]
@@ -1042,7 +1056,7 @@ with gr.Blocks(title="GPT-SoVITS WebUI") as app:
                         with gr.Column():                   
                             if_save_latest = gr.Checkbox(label=i18n("是否仅保存最新的ckpt文件以节省硬盘空间"), value=True, interactive=True, show_label=True)
                             if_save_every_weights = gr.Checkbox(label=i18n("是否在每次保存时间点将最终小模型保存至weights文件夹"), value=True, interactive=True, show_label=True)
-                            if_grad_ckpt = gr.Checkbox(label="v3是否开启梯度检查点节省显存占用", value=False, interactive=True if version == "v3" else False, show_label=True) # 只有V3s2可以用
+                            if_grad_ckpt = gr.Checkbox(label="v3是否开启梯度检查点节省显存占用", value=False, interactive=True if version == "v3" else False, show_label=True,visible=False) # 只有V3s2可以用
                         with gr.Row():
                             gpu_numbers1Ba = gr.Textbox(label=i18n("GPU卡号以-分割，每个卡号一个进程"), value="%s" % (gpus), interactive=True)
                 with gr.Row():
